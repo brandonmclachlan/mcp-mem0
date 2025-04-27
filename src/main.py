@@ -1,4 +1,4 @@
-# main-1.py (Modified for Bearer Authentication)
+# main-1.py (Corrected Bearer Authentication)
 
 # --- Required Imports ---
 from mcp.server.fastmcp import FastMCP, Context
@@ -10,12 +10,14 @@ from mem0 import Memory
 import asyncio
 import json
 import os
-from typing import Optional
+from typing import Optional, Callable, Awaitable # <<< MODIFIED IMPORT (Added Callable, Awaitable)
 
 # --- Imports needed for Authentication Middleware ---
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseCall
+# --- MODIFIED IMPORT: Removed RequestResponseCall ---
+from starlette.middleware.base import BaseHTTPMiddleware
+# --- End Modified Import ---
 from starlette.requests import Request
 from starlette.responses import Response, PlainTextResponse
 from starlette.routing import Mount
@@ -51,38 +53,33 @@ async def mem0_lifespan(server: FastMCP) -> AsyncIterator[Mem0Context]:
     finally:
         pass
 
-# --- Define the Authentication Middleware (Bearer Token Check) ---
+# --- Define the Authentication Middleware (Bearer Token Check - Corrected Type Hint) ---
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(
-        self, request: Request, call_next: RequestResponseCall
+        self,
+        request: Request,
+        # --- MODIFIED Type Hint: Use Callable instead of RequestResponseCall ---
+        call_next: Callable[[Request], Awaitable[Response]]
+        # --- End Modified Type Hint ---
     ) -> Response:
         if not EXPECTED_BEARER_TOKEN:
-            # If no token is set on the server, bypass auth (or raise error)
-            # For production, you might want to deny access if the token isn't set
             print("Warning: MCP_SERVER_AUTH_TOKEN not set. Skipping auth check.")
             response = await call_next(request)
             return response
 
-        # Apply authentication ONLY to the MCP SSE endpoint path
         if request.url.path == "/sse":
             auth_header = request.headers.get("Authorization")
-
             if not auth_header:
-                # Deny if Authorization header is missing
                 return PlainTextResponse("Unauthorized: Missing Authorization header", status_code=401)
 
-            # Check for 'Bearer ' prefix and extract token
             parts = auth_header.split()
             if len(parts) != 2 or parts[0].lower() != "bearer":
                  return PlainTextResponse("Unauthorized: Invalid Authorization header format (Expected 'Bearer <token>')", status_code=401)
 
-            token = parts[1] # The actual token sent by the client
-
-            # Compare received token with the expected token
-            if token != EXPECTED_BEERER_TOKEN:
+            token = parts[1]
+            if token != EXPECTED_BEARER_TOKEN:
                 return PlainTextResponse("Forbidden: Invalid Bearer token", status_code=403)
 
-        # If token is valid OR if the request path doesn't require auth, proceed
         response = await call_next(request)
         return response
 # --- End Authentication Middleware ---
@@ -95,10 +92,9 @@ mcp = FastMCP(
     lifespan=mem0_lifespan
 )
 
-# --- TOOL DEFINITIONS (Modified previously for user_id) ---
+# --- TOOL DEFINITIONS (From your main-1.py) ---
 @mcp.tool()
 async def save_memory(ctx: Context, text: str, user_id: Optional[str] = None) -> str:
-    # (Keep the implementation from the previous 'minimally modified' version)
     target_user_id = user_id if user_id else DEFAULT_USER_ID
     try:
         mem0_client = ctx.request_context.lifespan_context.mem0_client
@@ -110,7 +106,6 @@ async def save_memory(ctx: Context, text: str, user_id: Optional[str] = None) ->
 
 @mcp.tool()
 async def get_all_memories(ctx: Context, user_id: Optional[str] = None) -> str:
-    # (Keep the implementation from the previous 'minimally modified' version)
     target_user_id = user_id if user_id else DEFAULT_USER_ID
     try:
         mem0_client = ctx.request_context.lifespan_context.mem0_client
@@ -127,7 +122,6 @@ async def get_all_memories(ctx: Context, user_id: Optional[str] = None) -> str:
 
 @mcp.tool()
 async def search_memories(ctx: Context, query: str, user_id: Optional[str] = None, limit: int = 3) -> str:
-    # (Keep the implementation from the previous 'minimally modified' version)
     target_user_id = user_id if user_id else DEFAULT_USER_ID
     try:
         mem0_client = ctx.request_context.lifespan_context.mem0_client
@@ -156,7 +150,6 @@ app = Starlette(routes=routes, middleware=middleware)
 
 # --- Modify main execution block to run the Starlette app ---
 async def main():
-    # Import uvicorn here or at the top
     try:
         import uvicorn
     except ImportError:
@@ -164,7 +157,6 @@ async def main():
         return
 
     server_host = os.getenv("HOST", "0.0.0.0")
-    # Read port from env, default to 8050 if not set or invalid
     try:
         server_port = int(os.getenv("PORT", "8050"))
     except ValueError:
@@ -172,21 +164,12 @@ async def main():
         server_port = 8050
 
     print(f"Starting server with Bearer Authentication on {server_host}:{server_port}")
-    # Configure uvicorn to run the 'app' variable from this 'main.py' file
     config = uvicorn.Config("main:app", host=server_host, port=server_port, log_level="info")
     server = uvicorn.Server(config)
     await server.serve()
 
-# --- Original main() logic commented out ---
-# async def main_original():
-#     transport = os.getenv("TRANSPORT", "sse")
-#     if transport == 'sse':
-#         await mcp.run_sse_async()
-#     else:
-#         await mcp.run_stdio_async()
 
 if __name__ == "__main__":
-    # Check for required environment variables
     if not os.getenv("DATABASE_URL"):
          print("Warning: DATABASE_URL environment variable not set.")
     if not EXPECTED_BEARER_TOKEN:
