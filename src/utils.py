@@ -1,72 +1,34 @@
-# utils.py (Modified)
+# utils.py (Configured for potential Gemini usage)
 from mem0 import Memory
 import os
 
-# Custom instructions (Keep as is)
-# ... CUSTOM_INSTRUCTIONS = """...""" ...
-
 def get_mem0_client():
     # Get LLM provider and configuration
-    llm_provider = os.getenv('LLM_PROVIDER')
-    llm_api_key = os.getenv('LLM_API_KEY') # Generic key, might need specific ones
-    llm_model = os.getenv('LLM_CHOICE')
+    llm_provider = os.getenv('LLM_PROVIDER') # e.g., 'gemini', 'openai', 'ollama'
+    llm_model = os.getenv('LLM_CHOICE') # Optional: e.g., 'gemini-1.5-flash-latest'
 
-    # Get Embedder provider and configuration (assuming separate control if needed, else defaults to LLM provider)
-    # You might want to add a separate EMBEDDER_PROVIDER env var if you want to mix/match
-    embedder_provider = os.getenv('EMBEDDER_PROVIDER', llm_provider) # Default to llm_provider if not set
-    embedding_model = os.getenv('EMBEDDING_MODEL_CHOICE')
+    # Get Embedder provider and configuration
+    # Defaults to llm_provider if EMBEDDER_PROVIDER is not explicitly set
+    embedder_provider = os.getenv('EMBEDDER_PROVIDER', llm_provider) # e.g., 'gemini'
+    embedding_model = os.getenv('EMBEDDING_MODEL_CHOICE') # Optional: e.g., 'models/text-embedding-004'
 
-    # Specific API Keys (Recommended over generic LLM_API_KEY)
-    openai_api_key = os.getenv('OPENAI_API_KEY', llm_api_key) # Fallback for openai/openrouter
-    openrouter_api_key = os.getenv('OPENROUTER_API_KEY', llm_api_key) # Fallback for openrouter
+    # Specific API Keys for different providers
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    openrouter_api_key = os.getenv('OPENROUTER_API_KEY')
     gemini_api_key = os.getenv('GEMINI_API_KEY') # Key for Gemini LLM
-    google_api_key = os.getenv('GOOGLE_API_KEY') # Key for Gemini Embedder (often same as Gemini key)
+    google_api_key = os.getenv('GOOGLE_API_KEY') # Key for Gemini Embedder (might be the same as GEMINI_API_KEY)
 
     # Initialize config dictionary
     config = {}
-    embedding_dims = 768 # Default dimension, will be updated based on embedder
+    # Default embedding dimension - will be updated based on the chosen embedder
+    embedding_dims = 768 # Default suitable for Gemini's text-embedding-004
 
     # --- Configure LLM ---
-    if llm_provider == 'openai':
-        config["llm"] = {
-            "provider": "openai",
-            "config": {
-                "model": llm_model or "gpt-4o-mini", # Default OpenAI model
-                "temperature": 0.2,
-                "max_tokens": 2000,
-                "api_key": openai_api_key, # Use specific key
-            }
-        }
-    elif llm_provider == 'openrouter':
-         config["llm"] = {
-            "provider": "openrouter", # Use 'openrouter' provider if mem0 lib supports it, else might need 'openai' with base_url
-            "config": {
-                "model": llm_model, # Required
-                "temperature": 0.2,
-                "max_tokens": 2000,
-                "api_key": openrouter_api_key, # Use specific key
-                # "base_url": "https://openrouter.ai/api/v1" # May need base_url if using 'openai' provider
-            }
-        }
-    elif llm_provider == 'ollama':
-        config["llm"] = {
-            "provider": "ollama",
-            "config": {
-                "model": llm_model, # Required
-                "temperature": 0.2,
-                "max_tokens": 2000,
-            }
-        }
-        llm_base_url = os.getenv('LLM_BASE_URL')
-        if llm_base_url:
-            config["llm"]["config"]["ollama_base_url"] = llm_base_url
-
-    # --- NEW: Add Gemini LLM Configuration ---
-    elif llm_provider == 'gemini':
+    if llm_provider == 'gemini':
         if not gemini_api_key:
-            raise ValueError("GEMINI_API_KEY environment variable is required for Gemini LLM provider")
+            raise ValueError("LLM_PROVIDER is 'gemini' but GEMINI_API_KEY environment variable is not set.")
         config["llm"] = {
-            "provider": "gemini", # Use the provider name from Mem0 docs
+            "provider": "gemini",
             "config": {
                 "model": llm_model or "gemini-1.5-flash-latest", # Default Gemini model
                 "temperature": 0.2,
@@ -74,84 +36,91 @@ def get_mem0_client():
                 "api_key": gemini_api_key # Pass the API key
             }
         }
-    # --- End of Gemini LLM ---
-
+        print("Configured LLM provider: Gemini")
+    elif llm_provider == 'openai':
+        if not openai_api_key:
+             raise ValueError("LLM_PROVIDER is 'openai' but OPENAI_API_KEY environment variable is not set.")
+        config["llm"] = {
+            "provider": "openai",
+            "config": {
+                "model": llm_model or "gpt-4o-mini",
+                "temperature": 0.2,
+                "max_tokens": 2000,
+                "api_key": openai_api_key,
+            }
+        }
+        print("Configured LLM provider: OpenAI")
+    # Add other providers like openrouter, ollama as needed...
+    # elif llm_provider == 'ollama': ...
     else:
-        print(f"Warning: Unsupported LLM provider '{llm_provider}'. Mem0 might default to OpenAI.")
-        # Optionally raise an error: raise ValueError(f"Unsupported LLM provider: {llm_provider}")
-
+        # Default or raise error if no provider specified or supported
+        raise ValueError(f"Unsupported or unspecified LLM_PROVIDER: '{llm_provider}'. Set LLM_PROVIDER environment variable.")
 
     # --- Configure Embedder ---
-    # Using embedder_provider allows mixing (e.g., OpenAI LLM + Gemini Embedder)
-    if embedder_provider == 'openai':
+    if embedder_provider == 'gemini':
+        if not google_api_key:
+             # Mem0 Gemini Embedder often uses GOOGLE_API_KEY env var name
+            raise ValueError("EMBEDDER_PROVIDER is 'gemini' but GOOGLE_API_KEY environment variable is not set.")
+        gemini_embed_model = embedding_model or "models/text-embedding-004" # Default Gemini embedder
+        # Determine dims based on model - Assuming 768 for default
+        if gemini_embed_model == "models/text-embedding-004":
+            embedding_dims = 768
+        # Add conditions for other Gemini embed models if needed
+        # else: embedding_dims = ???
+        config["embedder"] = {
+            "provider": "gemini",
+            "config": {
+                "model": gemini_embed_model,
+                "embedding_dims": embedding_dims,
+                "api_key": google_api_key # Pass the API key
+            }
+        }
+        print(f"Configured Embedder provider: Gemini (dims: {embedding_dims})")
+
+    elif embedder_provider == 'openai':
+        if not openai_api_key:
+             raise ValueError("EMBEDDER_PROVIDER is 'openai' but OPENAI_API_KEY environment variable is not set.")
         embedding_dims = 1536 # Default for text-embedding-3-small
         config["embedder"] = {
             "provider": "openai",
             "config": {
                 "model": embedding_model or "text-embedding-3-small",
                 "embedding_dims": embedding_dims,
-                "api_key": openai_api_key # Use specific key
+                "api_key": openai_api_key
             }
         }
-
-    elif embedder_provider == 'ollama':
-        embedding_dims = 768 # Default for nomic-embed-text
-        config["embedder"] = {
-            "provider": "ollama",
-            "config": {
-                "model": embedding_model or "nomic-embed-text",
-                "embedding_dims": embedding_dims
-            }
-        }
-        embedding_base_url = os.getenv('LLM_BASE_URL') # Assuming embedder uses same base URL
-        if embedding_base_url:
-            config["embedder"]["config"]["ollama_base_url"] = embedding_base_url
-
-    # --- NEW: Add Gemini Embedder Configuration ---
-    elif embedder_provider == 'gemini':
-        if not google_api_key:
-            # Note: Mem0 Gemini Embedder docs use GOOGLE_API_KEY env var name
-            raise ValueError("GOOGLE_API_KEY environment variable is required for Gemini Embedder provider")
-        gemini_embed_model = embedding_model or "models/text-embedding-004"
-        # Determine dims based on model - needs mapping or assuming default
-        embedding_dims = 768 # Default for text-embedding-004
-        config["embedder"] = {
-            "provider": "gemini", # Use the provider name from Mem0 docs
-            "config": {
-                "model": gemini_embed_model,
-                "embedding_dims": embedding_dims,
-                 # Mem0 docs show GOOGLE_API_KEY for embedder
-                "api_key": google_api_key
-            }
-        }
-    # --- End of Gemini Embedder ---
-
+        print(f"Configured Embedder provider: OpenAI (dims: {embedding_dims})")
+    # Add other providers like ollama as needed...
+    # elif embedder_provider == 'ollama': ...
     else:
-         print(f"Warning: Unsupported Embedder provider '{embedder_provider}'. Mem0 might default to OpenAI.")
-         # Set default dims if needed, assuming OpenAI fallback
-         embedding_dims = 1536
+        # Default or raise error if no provider specified or supported
+        raise ValueError(f"Unsupported or unspecified EMBEDDER_PROVIDER: '{embedder_provider}'. Set EMBEDDER_PROVIDER environment variable.")
 
 
-    # Configure Supabase vector store (or potentially Qdrant if preferred)
+    # --- Configure Vector Store ---
+    # Ensure DATABASE_URL is set for Supabase
+    database_url = os.environ.get('DATABASE_URL')
+    if not database_url:
+        raise ValueError("DATABASE_URL environment variable is required for Supabase vector store.")
+
     config["vector_store"] = {
-        "provider": "supabase", # Or change to "qdrant" if using Qdrant integration
+        "provider": "supabase", # Assumes Supabase
         "config": {
-            "connection_string": os.environ.get('DATABASE_URL', ''),
+            "connection_string": database_url,
             "collection_name": "mem0_memories",
             # Use the determined embedding_dims based on the chosen embedder
-            "embedding_model_dims": embedding_dims
-            # If using Qdrant, replace "connection_string" with Qdrant config:
-            # "url": os.getenv("QDRANT_URL"),
-            # "api_key": os.getenv("QDRANT_API_KEY"),
+            "embedding_model_dims": embedding_dims # This is crucial
         }
     }
+    print(f"Configured Vector Store: Supabase (expecting dims: {embedding_dims})")
 
+    # Optional: Custom instructions
     # config["custom_fact_extraction_prompt"] = CUSTOM_INSTRUCTIONS
 
-    # Create and return the Memory client
-    print(f"Initializing Mem0 with config: {config}") # Add logging
+    # --- Create and return the Memory client ---
+    print(f"Initializing Mem0 with final config...") # Simplified logging
     try:
         return Memory.from_config(config)
     except Exception as e:
-        print(f"Error during Mem0 initialization: {e}")
+        print(f"Error during Mem0 initialization with config {config}: {e}")
         raise
