@@ -9,8 +9,4 @@ dependencies = [
     "mcp[cli]>=1.3.0",
     "mem0ai>=0.1.88",
     "vecs>=0.4.5",
-    # --- ADDED DEPENDENCIES ---
-    "starlette>=0.37.0",
-    "uvicorn[standard]>=0.29.0"
-    # --- END ADDED DEPENDENCIES ---
 ]
